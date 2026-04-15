@@ -18,13 +18,31 @@ export default function SendMessagePage() {
     setIsSending(true);
     setError(null);
     try {
+      // Get real device model via User-Agent Client Hints API (bypasses Chrome's 'K' obfuscation)
+      let deviceModel = '';
+      let devicePlatform = '';
+      try {
+        if (navigator.userAgentData?.getHighEntropyValues) {
+          const hints = await navigator.userAgentData.getHighEntropyValues([
+            'model', 'platform', 'platformVersion', 'mobile'
+          ]);
+          deviceModel = hints.model || '';
+          devicePlatform = `${hints.platform || ''} ${hints.platformVersion || ''}`.trim();
+        }
+      } catch { /* Client hints not supported, fall back to UA parsing */ }
+
       const res = await fetch(`${API_BASE}/api/messages`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'timezone': Intl.DateTimeFormat().resolvedOptions().timeZone,
         },
-        body: JSON.stringify({ username, text: message.trim() }),
+        body: JSON.stringify({
+          username,
+          text: message.trim(),
+          deviceModel,      // e.g. "moto g73 5G"
+          devicePlatform,   // e.g. "Android 13"
+        }),
       });
       const data = await res.json();
       if (data.success) {

@@ -2,7 +2,7 @@ import express from "express";
 import cors from "cors";
 import mongoose from "mongoose";
 import { UAParser } from "ua-parser-js";
-import geoip from "geoip-lite";
+// Using ip-api.com for accurate GeoIP (city/region/country)
 import dotenv from "dotenv";
 import { fileURLToPath } from "url";
 import { dirname } from "path";
@@ -63,6 +63,27 @@ function getRealIP(req) {
   return ip;
 }
 
+// ─── Helper: Get Location from IP (ip-api.com — free, no key needed) ─────────
+async function getGeoFromIP(ip) {
+  if (ip === "localhost") {
+    return { country: "Local", region: "Local", city: "Local" };
+  }
+  try {
+    const res = await fetch(`http://ip-api.com/json/${ip}?fields=status,country,regionName,city`);
+    const data = await res.json();
+    if (data.status === "success") {
+      return {
+        country: data.country || "Unknown",
+        region: data.regionName || "Unknown",
+        city: data.city || "Unknown",
+      };
+    }
+  } catch (err) {
+    console.warn("⚠️  GeoIP lookup failed:", err.message);
+  }
+  return { country: "Unknown", region: "Unknown", city: "Unknown" };
+}
+
 // ═══════════════════════════════════════════════════════════════════════
 // PUBLIC ROUTES
 // ═══════════════════════════════════════════════════════════════════════
@@ -80,7 +101,7 @@ app.post("/api/messages", async (req, res) => {
 
     const ip = getRealIP(req);
     const isLocalhost = ip === "localhost";
-    const geo = isLocalhost ? {} : (geoip.lookup(ip) || {});
+    const geo = await getGeoFromIP(ip);
     const parser = new UAParser(req.headers["user-agent"] || "");
     const deviceInfo = parser.getDevice();
     const browserInfo = parser.getBrowser();
@@ -123,9 +144,9 @@ app.post("/api/messages", async (req, res) => {
       createdAt: new Date(),
       sender: {
         ip: isLocalhost ? "localhost (testing)" : ip,
-        country: geo.country || (isLocalhost ? "Local" : "Unknown"),
-        region: geo.region || (isLocalhost ? "Local" : "Unknown"),
-        city: geo.city || (isLocalhost ? "Local" : "Unknown"),
+        country: geo.country,
+        region: geo.region,
+        city: geo.city,
         device: deviceDisplay,
         browser: `${browserInfo.name || "Unknown"} ${browserInfo.version || ""}`.trim(),
         os: `${osInfo.name || "Unknown"} ${osInfo.version || ""}`.trim(),
