@@ -79,6 +79,18 @@ app.post("/api/messages", async (req, res) => {
     const isLocalhost = ip === "localhost";
     const geo = isLocalhost ? {} : (geoip.lookup(ip) || {});
     const parser = new UAParser(req.headers["user-agent"] || "");
+    const deviceInfo = parser.getDevice();
+    const browserInfo = parser.getBrowser();
+    const osInfo = parser.getOS();
+
+    // Build a rich device string: model + type
+    // e.g. "Samsung SM-G991B (mobile)" or "iPhone (mobile)" or "desktop"
+    const deviceType = deviceInfo.type || "desktop";
+    const deviceVendor = deviceInfo.vendor || "";
+    const deviceModel = deviceInfo.model || "";
+    const deviceDisplay = deviceModel
+      ? `${deviceVendor ? deviceVendor + " " : ""}${deviceModel} (${deviceType})`
+      : deviceType;
 
     const message = new Message({
       username: username.toLowerCase(),
@@ -89,9 +101,9 @@ app.post("/api/messages", async (req, res) => {
         country: geo.country || (isLocalhost ? "Local" : "Unknown"),
         region: geo.region || (isLocalhost ? "Local" : "Unknown"),
         city: geo.city || (isLocalhost ? "Local" : "Unknown"),
-        device: parser.getDevice().type || "desktop",
-        browser: parser.getBrowser().name || "Unknown",
-        os: parser.getOS().name || "Unknown",
+        device: deviceDisplay,
+        browser: `${browserInfo.name || "Unknown"} ${browserInfo.version || ""}`.trim(),
+        os: `${osInfo.name || "Unknown"} ${osInfo.version || ""}`.trim(),
         userAgent: req.headers["user-agent"] || "Unknown",
         language: req.headers["accept-language"] || "Unknown",
         timezone: timezone || "Unknown",
