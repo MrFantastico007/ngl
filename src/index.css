@@ -1,0 +1,12 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    @apply font-sans antialiased m-0 min-h-screen text-white;
+    /* A vibrant pink-to-orange gradient exactly matching the NGL screenshot */
+    background: linear-gradient(180deg, #ec1379 0%, #ff4b2b 100%);
+    background-attachment: fixed;
+  }
+}
