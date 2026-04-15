@@ -18,30 +18,64 @@ export default function SendMessagePage() {
     setIsSending(true);
     setError(null);
     try {
-      // Get real device model via User-Agent Client Hints API (bypasses Chrome's 'K' obfuscation)
+      // ─── Collect device info using multiple methods ───
       let deviceModel = '';
       let devicePlatform = '';
+
+      // Method 1: User-Agent Client Hints API (best — returns real model like "moto g73 5G")
       try {
         if (navigator.userAgentData?.getHighEntropyValues) {
           const hints = await navigator.userAgentData.getHighEntropyValues([
-            'model', 'platform', 'platformVersion', 'mobile'
+            'model', 'platform', 'platformVersion', 'fullVersionList', 'mobile'
           ]);
           deviceModel = hints.model || '';
           devicePlatform = `${hints.platform || ''} ${hints.platformVersion || ''}`.trim();
         }
-      } catch { /* Client hints not supported, fall back to UA parsing */ }
+      } catch (e) {
+        console.warn('Client Hints failed:', e);
+      }
+
+      // Method 2: Fallback — parse the device model from the raw UA string
+      // Chrome reduces Android UA to "K", but some browsers still expose the real model
+      if (!deviceModel) {
+        try {
+          const ua = navigator.userAgent || '';
+          // Match patterns like "moto g73 5G Build/" or "SM-G991B Build/" or "Pixel 7 Build/"
+          const androidModelMatch = ua.match(/;\s*([^;)]+?)\s*Build\//i);
+          if (androidModelMatch && androidModelMatch[1]) {
+            const model = androidModelMatch[1].trim();
+            // Filter out generic/useless values
+            if (model.length > 1 && model !== 'K' && model !== 'wv') {
+              deviceModel = model;
+            }
+          }
+          // For iOS devices
+          if (!deviceModel) {
+            if (/iPhone/.test(ua)) deviceModel = 'iPhone';
+            else if (/iPad/.test(ua)) deviceModel = 'iPad';
+          }
+        } catch { /* ignore */ }
+      }
+
+      // Method 3: Use userAgentData brands as last resort
+      if (!deviceModel && navigator.userAgentData) {
+        try {
+          const data = navigator.userAgentData;
+          if (data.mobile) deviceModel = 'Mobile Device';
+          if (!devicePlatform) devicePlatform = data.platform || '';
+        } catch { /* ignore */ }
+      }
 
       const res = await fetch(`${API_BASE}/api/messages`, {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'timezone': Intl.DateTimeFormat().resolvedOptions().timeZone,
-        },
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           username,
           text: message.trim(),
+          timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
           deviceModel,      // e.g. "moto g73 5G"
-          devicePlatform,   // e.g. "Android 13"
+          devicePlatform,   // e.g. "Android 14"
+          screenRes: `${screen.width}x${screen.height}`,
         }),
       });
       const data = await res.json();
