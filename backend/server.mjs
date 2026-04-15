@@ -83,14 +83,31 @@ app.post("/api/messages", async (req, res) => {
     const browserInfo = parser.getBrowser();
     const osInfo = parser.getOS();
 
-    // Build a rich device string: model + type
-    // e.g. "Samsung SM-G991B (mobile)" or "iPhone (mobile)" or "desktop"
     const deviceType = deviceInfo.type || "desktop";
     const deviceVendor = deviceInfo.vendor || "";
     const deviceModel = deviceInfo.model || "";
-    const deviceDisplay = deviceModel
-      ? `${deviceVendor ? deviceVendor + " " : ""}${deviceModel} (${deviceType})`
-      : deviceType;
+    const osName = osInfo.name || "";
+    const osVersion = osInfo.version || "";
+
+    // Only use model if it looks meaningful (more than 2 chars, not a 1-letter code)
+    const isGoodModel = deviceModel.length > 2 || /^\d/.test(deviceModel);
+    
+    let deviceDisplay;
+    if (isGoodModel && deviceVendor) {
+      // e.g. "Samsung SM-G991B (mobile)"
+      deviceDisplay = `${deviceVendor} ${deviceModel} (${deviceType})`;
+    } else if (isGoodModel && deviceModel) {
+      // e.g. "SM-G991B (mobile)"
+      deviceDisplay = `${deviceModel} (${deviceType})`;
+    } else if (deviceVendor) {
+      // e.g. "Apple iPhone (mobile)"
+      deviceDisplay = `${deviceVendor} ${osName} ${deviceType}`;
+    } else if (osName) {
+      // Fallback: "Android 13 mobile"
+      deviceDisplay = `${osName} ${osVersion} ${deviceType}`.trim();
+    } else {
+      deviceDisplay = deviceType;
+    }
 
     const message = new Message({
       username: username.toLowerCase(),
