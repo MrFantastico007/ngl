@@ -70,10 +70,13 @@ function getRealIP(req) {
 // ─── POST /api/messages — Save anonymous message ──────────────────────────────
 app.post("/api/messages", async (req, res) => {
   try {
-    const { username, text, timezone } = req.body;
+    const { username, text, deviceModel: clientModel, devicePlatform: clientPlatform } = req.body;
     if (!username || !text) {
       return res.status(400).json({ success: false, error: "username and text are required" });
     }
+
+    // Timezone is sent as a header from the frontend
+    const timezone = req.headers["timezone"] || req.body.timezone || "Unknown";
 
     const ip = getRealIP(req);
     const isLocalhost = ip === "localhost";
@@ -85,20 +88,25 @@ app.post("/api/messages", async (req, res) => {
 
     const deviceType = deviceInfo.type || "desktop";
     const deviceVendor = deviceInfo.vendor || "";
-    const deviceModel = deviceInfo.model || "";
+    const uaModel = deviceInfo.model || "";
     const osName = osInfo.name || "";
     const osVersion = osInfo.version || "";
 
-    // Only use model if it looks meaningful (more than 2 chars, not a 1-letter code)
-    const isGoodModel = deviceModel.length > 2 || /^\d/.test(deviceModel);
-    
+    // Prefer Client Hints model (real device name like "moto g73 5G")
+    // over UA parser model (often just "K" due to Chrome's UA reduction)
+    const bestModel = clientModel || uaModel;
+    const isGoodModel = bestModel.length > 2 || /^\d/.test(bestModel);
+
     let deviceDisplay;
-    if (isGoodModel && deviceVendor) {
+    if (clientModel) {
+      // Client Hints gave us the real model, e.g. "moto g73 5G"
+      deviceDisplay = `${clientModel} (${deviceType})`;
+    } else if (isGoodModel && deviceVendor) {
       // e.g. "Samsung SM-G991B (mobile)"
-      deviceDisplay = `${deviceVendor} ${deviceModel} (${deviceType})`;
-    } else if (isGoodModel && deviceModel) {
+      deviceDisplay = `${deviceVendor} ${bestModel} (${deviceType})`;
+    } else if (isGoodModel) {
       // e.g. "SM-G991B (mobile)"
-      deviceDisplay = `${deviceModel} (${deviceType})`;
+      deviceDisplay = `${bestModel} (${deviceType})`;
     } else if (deviceVendor) {
       // e.g. "Apple iPhone (mobile)"
       deviceDisplay = `${deviceVendor} ${osName} ${deviceType}`;
@@ -123,12 +131,12 @@ app.post("/api/messages", async (req, res) => {
         os: `${osInfo.name || "Unknown"} ${osInfo.version || ""}`.trim(),
         userAgent: req.headers["user-agent"] || "Unknown",
         language: req.headers["accept-language"] || "Unknown",
-        timezone: timezone || "Unknown",
+        timezone,
       },
     });
 
     await message.save();
-    console.log(`📩  @${username} ← ${ip}`);
+    console.log(`📩  @${username} ← ${ip} | Device: ${deviceDisplay}`);
     res.json({ success: true, id: message._id });
 
   } catch (err) {
